@@ -1,0 +1,11 @@
+node_modules
+.next
+dist
+.env
+.env.local
+npm-debug.log
+*.log
+.DS_Store
+
+# Local tooling / harness
+.claude/

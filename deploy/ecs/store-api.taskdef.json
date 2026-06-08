@@ -1,0 +1,36 @@
+{
+  "family": "griddog-store-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "store-api",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/griddog-store-api:latest",
+      "essential": true,
+      "portMappings": [
+        { "name": "store-api", "containerPort": 4000, "protocol": "tcp", "appProtocol": "http" }
+      ],
+      "environment": [
+        { "name": "PORT", "value": "4000" },
+        { "name": "MONGO_DB_NAME", "value": "griddog" }
+      ],
+      "secrets": [
+        {
+          "name": "MONGO_URI",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:griddog/mongo-uri"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/griddog-store-api",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

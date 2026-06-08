@@ -1,0 +1,12 @@
+{
+  "name": "griddog-ecs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "gridDog - 3-tier Datadog merch demo (storefront + store-api + cms-ui + cms-api + MongoDB)",
+  "scripts": {
+    "seed": "node scripts/seed.js"
+  },
+  "dependencies": {
+    "mongodb": "^4.17.2"
+  }
+}

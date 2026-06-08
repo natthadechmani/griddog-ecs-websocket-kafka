@@ -1,0 +1,151 @@
+{
+    "family": "griddog-store-api",
+    "containerDefinitions": [
+        {
+            "name": "griddog-store-api",
+            "image": "369042512949.dkr.ecr.ap-southeast-1.amazonaws.com/griddog-store-api:latest",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 4000,
+                    "hostPort": 4000,
+                    "protocol": "tcp",
+                    "name": "store-api",
+                    "appProtocol": "http"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "DD_SERVICE",
+                    "value": "griddog-store-api"
+                },
+                {
+                    "name": "DD_ENV",
+                    "value": "ecs-dev"
+                },
+                {
+                    "name": "PORT",
+                    "value": "4000"
+                },
+                {
+                    "name": "MONGO_DB_NAME",
+                    "value": "griddog"
+                },
+                {
+                    "name": "DD_TRACE_AGENT_URL",
+                    "value": "unix:///var/run/datadog/apm.socket"
+                }
+            ],
+            "mountPoints": [
+                {
+                    "sourceVolume": "dd-socket",
+                    "containerPath": "/var/run/datadog",
+                    "readOnly": false
+                }
+            ],
+            "volumesFrom": [],
+            "secrets": [
+                {
+                    "name": "MONGO_URI",
+                    "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:369042512949:secret:griddog/mongo-uri-5NX0nj"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/",
+                    "awslogs-create-group": "true",
+                    "awslogs-region": "ap-southeast-1",
+                    "awslogs-stream-prefix": "ecs"
+                },
+                "secretOptions": []
+            },
+            "systemControls": []
+        },
+        {
+            "name": "datadog-agent",
+            "image": "public.ecr.aws/datadog/agent:latest",
+            "cpu": 0,
+            "portMappings": [],
+            "essential": false,
+            "environment": [
+                {
+                    "name": "ECS_FARGATE",
+                    "value": "true"
+                },
+                {
+                    "name": "DD_APM_ENABLED",
+                    "value": "true"
+                },
+                {
+                    "name": "DD_ENV",
+                    "value": "ecs-dev"
+                },
+                {
+                    "name": "DD_SITE",
+                    "value": "datadoghq.com"
+                },
+                {
+                    "name": "DD_DOCKER_LABELS_AS_TAGS",
+                    "value": "{\"com.amazonaws.ecs.task-definition-family\":\"task_family\",\"com.amazonaws.ecs.container-name\":\"container_name\"}"
+                }
+            ],
+            "mountPoints": [
+                {
+                    "sourceVolume": "dd-socket",
+                    "containerPath": "/var/run/datadog",
+                    "readOnly": false
+                }
+            ],
+            "volumesFrom": [],
+            "secrets": [
+                {
+                    "name": "DD_API_KEY",
+                    "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:369042512949:secret:griddog/dd-api-key-lecBR7"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/griddog-store-api",
+                    "awslogs-create-group": "true",
+                    "awslogs-region": "ap-southeast-1",
+                    "awslogs-stream-prefix": "ecs"
+                },
+                "secretOptions": []
+            },
+            "systemControls": []
+        }
+    ],
+    "taskRoleArn": "arn:aws:iam::369042512949:role/datadog-task-role-grid",
+    "executionRoleArn": "arn:aws:iam::369042512949:role/ecsTaskExecutionRole-Grid",
+    "networkMode": "awsvpc",
+    "volumes": [
+        {
+            "name": "dd-socket",
+            "host": {}
+        }
+    ],
+    "placementConstraints": [],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "256",
+    "memory": "512",
+    "runtimePlatform": {
+        "cpuArchitecture": "X86_64",
+        "operatingSystemFamily": "LINUX"
+    },
+    "enableFaultInjection": false,
+    "tags": [
+        {
+            "key": "griddog",
+            "value": "griddog-ecs"
+        },
+        {
+            "key": "datadog",
+            "value": "griddog"
+        }
+    ]
+}

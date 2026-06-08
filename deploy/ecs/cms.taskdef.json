@@ -1,0 +1,55 @@
+{
+  "family": "griddog-cms",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "cms-api",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/griddog-cms-api:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 4001, "protocol": "tcp" }],
+      "environment": [
+        { "name": "PORT", "value": "4001" },
+        { "name": "MONGO_DB_NAME", "value": "griddog" }
+      ],
+      "secrets": [
+        {
+          "name": "MONGO_URI",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:griddog/mongo-uri"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/griddog-cms",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "cms-api"
+        }
+      }
+    },
+    {
+      "name": "cms-ui",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/griddog-cms-ui:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 3001, "protocol": "tcp" }],
+      "environment": [
+        {
+          "name": "CMS_API_URL",
+          "value": "http://localhost:4001"
+        }
+      ],
+      "dependsOn": [{ "containerName": "cms-api", "condition": "START" }],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/griddog-cms",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "cms-ui"
+        }
+      }
+    }
+  ]
+}

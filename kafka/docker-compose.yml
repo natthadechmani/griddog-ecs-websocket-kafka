@@ -1,0 +1,75 @@
+# 3-broker Kafka cluster (KRaft mode) on a single host.
+# Simulates HA: RF=3, 3-voter controller quorum, survives 1 broker loss.
+# NOT true HA — one host is still a single point of failure.
+#
+# Run (from the EC2 host):
+#   export EC2_PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+#   docker compose up -d
+#
+# Local test (this machine):
+#   EC2_PRIVATE_IP=127.0.0.1 docker compose up -d
+#
+# EC2_PRIVATE_IP is what remote clients (your Fargate task) are told to connect
+# to. Leave it as localhost and cross-host clients break.
+
+x-kafka-common: &kafka-common
+  image: apache/kafka:4.2.0
+  environment: &kafka-common-env
+    KAFKA_PROCESS_ROLES: broker,controller
+    KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+    KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka1:9093,2@kafka2:9093,3@kafka3:9093
+    CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+    KAFKA_MIN_INSYNC_REPLICAS: 2
+
+services:
+  kafka1:
+    <<: *kafka-common
+    container_name: kafka1
+    ports:
+      - "9092:9092"
+    environment:
+      <<: *kafka-common-env
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: INTERNAL://kafka1:19092,CONTROLLER://kafka1:9093,EXTERNAL://0.0.0.0:9092
+      # INTERNAL = brokers find each other by service name on the Compose network.
+      # EXTERNAL = remote clients (Fargate) reach this broker at <EC2_PRIVATE_IP>:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:19092,EXTERNAL://${EC2_PRIVATE_IP}:9092
+    volumes:
+      - kafka1-data:/var/lib/kafka/data
+
+  kafka2:
+    <<: *kafka-common
+    container_name: kafka2
+    ports:
+      - "9093:9092"
+    environment:
+      <<: *kafka-common-env
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: INTERNAL://kafka2:19092,CONTROLLER://kafka2:9093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka2:19092,EXTERNAL://${EC2_PRIVATE_IP}:9093
+    volumes:
+      - kafka2-data:/var/lib/kafka/data
+
+  kafka3:
+    <<: *kafka-common
+    container_name: kafka3
+    ports:
+      - "9094:9092"
+    environment:
+      <<: *kafka-common-env
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: INTERNAL://kafka3:19092,CONTROLLER://kafka3:9093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka3:19092,EXTERNAL://${EC2_PRIVATE_IP}:9094
+    volumes:
+      - kafka3-data:/var/lib/kafka/data
+
+volumes:
+  kafka1-data:
+  kafka2-data:
+  kafka3-data:

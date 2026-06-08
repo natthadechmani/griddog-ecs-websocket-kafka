@@ -1,0 +1,67 @@
+services:
+  mongo:
+    image: mongo:8.0
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  store-api:
+    build: ./store-api
+    environment:
+      - PORT=4000
+      - MONGO_URI=mongodb://mongo:27017/griddog
+      # Reach the 3-broker Kafka via INTERNAL listeners (we join its network below).
+      - KAFKA_BROKERS=kafka1:19092,kafka2:19092,kafka3:19092
+      - KAFKA_AUTH=none
+      - KAFKA_TOPIC=griddog-checkouts
+    ports:
+      - "4000:4000"
+    depends_on:
+      - mongo
+    networks:
+      - default
+      - kafka_default
+
+  cms-api:
+    build: ./cms-api
+    environment:
+      - PORT=4001
+      - MONGO_URI=mongodb://mongo:27017/griddog
+    ports:
+      - "4001:4001"
+    depends_on:
+      - mongo
+
+  storefront:
+    build: ./storefront
+    environment:
+      # Next server proxies /api/* to store-api (same as ECS, just a different host)
+      - STORE_API_URL=http://store-api:4000
+      # The browser connects socket.io directly to store-api's published port.
+      - SOCKET_URL=http://localhost:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - store-api
+
+  cms-ui:
+    build: ./cms-ui
+    environment:
+      # On ECS this is http://localhost:4001 (sibling container); locally it's the compose service.
+      - CMS_API_URL=http://cms-api:4001
+    ports:
+      - "3001:3001"
+    depends_on:
+      - cms-api
+
+volumes:
+  mongo_data:
+
+networks:
+  default:
+  # The Kafka cluster's compose network (from kafka/docker-compose.yml).
+  # Created when you run the kafka stack; store-api joins it to reach the brokers.
+  kafka_default:
+    external: true
