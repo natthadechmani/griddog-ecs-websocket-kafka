@@ -10,7 +10,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 @Injectable()
 export class CheckoutConsumer implements OnModuleInit, OnModuleDestroy {
-  private consumer: Consumer;
+  private consumer?: Consumer;
+  private stopped = false;
 
   constructor(
     @Inject(KAFKA) private readonly kafka: Kafka,
@@ -18,7 +19,43 @@ export class CheckoutConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly realtime: RealtimeService,
   ) {}
 
-  async onModuleInit() {
+  onModuleInit() {
+    // Kick off Kafka + index setup in the background so the HTTP server can
+    // start listening immediately. If brokers (or Mongo) are unreachable the
+    // API and /health still come up, and we retry connecting until success.
+    void this.initInBackground();
+  }
+
+  private async initInBackground() {
+    for (let attempt = 1; !this.stopped; attempt++) {
+      try {
+        await this.connectAndRun();
+        // eslint-disable-next-line no-console
+        console.log('Kafka consumer running (group griddog-checkout-writer)');
+        return;
+      } catch (e) {
+        // Clean up a partially-connected consumer before retrying.
+        if (this.consumer) {
+          try {
+            await this.consumer.disconnect();
+          } catch {
+            /* ignore */
+          }
+          this.consumer = undefined;
+        }
+        const delay = Math.min(30000, 1000 * 2 ** Math.min(attempt, 5));
+        // eslint-disable-next-line no-console
+        console.error(
+          `Kafka consumer init failed (attempt ${attempt}): ${
+            (e as Error).message
+          }; retrying in ${delay}ms`,
+        );
+        await sleep(delay);
+      }
+    }
+  }
+
+  private async connectAndRun() {
     // Idempotency guard: one order doc per transactionId (sparse so legacy docs
     // without the field don't collide on null).
     await this.db
@@ -48,11 +85,17 @@ export class CheckoutConsumer implements OnModuleInit, OnModuleDestroy {
     }
     await admin.disconnect();
 
-    this.consumer = this.kafka.consumer({ groupId: 'griddog-checkout-writer' });
-    await this.consumer.connect();
-    await this.consumer.subscribe({ topic: KAFKA_TOPIC, fromBeginning: false });
+    const consumer = this.kafka.consumer({ groupId: 'griddog-checkout-writer' });
+    this.consumer = consumer;
+    await consumer.connect();
+    // fromBeginning: true so a freshly-created consumer group still picks up
+    // messages produced during its startup/connect window (otherwise it starts
+    // at the latest offset and silently skips them → client stuck on
+    // "Processing…"). The Mongo upsert below is idempotent, so re-reading old
+    // messages is harmless.
+    await consumer.subscribe({ topic: KAFKA_TOPIC, fromBeginning: true });
 
-    await this.consumer.run({
+    await consumer.run({
       eachMessage: async ({ message }) => {
         if (!message.value) return;
         const event = JSON.parse(message.value.toString());
@@ -60,7 +103,7 @@ export class CheckoutConsumer implements OnModuleInit, OnModuleDestroy {
         // eslint-disable-next-line no-console
         console.log(`consuming checkout txnId=${txnId}`);
 
-        await sleep(2000); // mock processing time
+        await sleep(500); // mock processing time
 
         await this.db.collection('checkouts').updateOne(
           { transactionId: txnId },
@@ -85,12 +128,10 @@ export class CheckoutConsumer implements OnModuleInit, OnModuleDestroy {
         });
       },
     });
-
-    // eslint-disable-next-line no-console
-    console.log('Kafka consumer running (group griddog-checkout-writer)');
   }
 
   async onModuleDestroy() {
+    this.stopped = true;
     if (this.consumer) {
       await this.consumer.disconnect();
     }

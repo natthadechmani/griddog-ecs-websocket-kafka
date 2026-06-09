@@ -4,14 +4,15 @@
   "description": "gridDog store API - products (read) + checkout (write)",
   "scripts": {
     "build": "nest build",
-    "start": "node dist/main",
+    "start": "NODE_OPTIONS='--require dd-trace/init' node dist/main",
     "start:dev": "nest start --watch"
   },
   "dependencies": {
-    "@nestjs/common": "7.0.0",
-    "@nestjs/core": "7.0.0",
-    "@nestjs/platform-express": "7.0.0",
+    "@nestjs/common": "7.6.18",
+    "@nestjs/core": "7.6.18",
+    "@nestjs/platform-express": "7.6.18",
     "aws-msk-iam-sasl-signer-js": "^1.0.0",
+    "dd-trace": "^4.55.0",
     "kafkajs": "^2.2.4",
     "mongodb": "^4.17.2",
     "reflect-metadata": "^0.1.13",
@@ -19,8 +20,8 @@
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
-    "@nestjs/cli": "^7.0.0",
-    "@nestjs/schematics": "^7.0.0",
+    "@nestjs/cli": "7.6.0",
+    "@nestjs/schematics": "7.3.1",
     "@types/node": "^16.18.0",
     "typescript": "4.7.4"
   }

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { datadogRum } from '@datadog/browser-rum';
 import { api, formatPrice } from '../lib/api';
 import { CartItem, cartTotal, clearCart, getCart } from '../lib/cart';
 
@@ -38,21 +39,46 @@ export default function Checkout() {
     const transactionId = uuid();
     const total = cartTotal(items);
 
+    // Correlate this RUM session/view with the backend APM spans, which all tag
+    // `checkout.transaction_id`. RUM does not auto-trace WebSocket frames, so we
+    // emit custom actions around the socket lifecycle below.
+    datadogRum.setGlobalContextProperty('checkout.transaction_id', transactionId);
+    const subscribedAt = Date.now();
+
     try {
       // 1. Connect + subscribe to our transactionId BEFORE posting, so the room
       //    exists before the consumer emits (the 2s mock wait gives margin).
       const { socketUrl } = await api('/config');
       const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
       socketRef.current = socket;
-      socket.on('connect', () => socket.emit('subscribe', { transactionId }));
+      socket.on('connect', () => {
+        socket.emit('subscribe', { transactionId });
+        datadogRum.addAction('checkout.socket.subscribe', {
+          transactionId,
+          socketUrl,
+          transport: socket.io?.engine?.transport?.name,
+        });
+      });
+      socket.on('connect_error', (err: Error) => {
+        datadogRum.addAction('checkout.socket.connect_error', {
+          transactionId,
+          error: String(err?.message || err),
+        });
+      });
       socket.on('checkout:done', (msg: { transactionId: string }) => {
         if (msg.transactionId === transactionId) {
+          // End-to-end realtime latency: subscribe → checkout:done over the socket.
+          datadogRum.addAction('checkout.socket.done', {
+            transactionId,
+            realtimeLatencyMs: Date.now() - subscribedAt,
+          });
           setPhase('done');
           socket.disconnect();
         }
       });
 
-      // 2. Publish the checkout (returns 202 immediately).
+      // 2. Publish the checkout (returns 202 immediately). This fetch is already
+      //    traced by RUM (allowedTracingUrls) and links to the backend APM trace.
       await api('/checkout', {
         method: 'POST',
         body: JSON.stringify({ transactionId, items, customer: { name, email } }),
@@ -63,6 +89,10 @@ export default function Checkout() {
       setPhase('processing');
     } catch (err) {
       socketRef.current?.disconnect();
+      datadogRum.addAction('checkout.submit_error', {
+        transactionId,
+        error: String(err),
+      });
       setError(String(err));
     }
   };
